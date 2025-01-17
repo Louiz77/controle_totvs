@@ -51,7 +51,7 @@ class PDFGenerator:
 
         pdf.set_font("Arial", style="I", size=10)
         pdf.cell(0, 10, txt=f"Relatório gerado em: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align="R")
-        pdf.ln(20)  # Espaçamento antes de começar o conteúdo
+        pdf.ln(20)
 
     def generate_pdf(self, output_file):
         """Gera um PDF com as informações da planilha."""
@@ -66,6 +66,15 @@ class PDFGenerator:
         pdf.set_font("Arial", style="B", size=16)
         pdf.cell(200, 10, txt="Tabela Resumo dos Chamados", ln=True, align="C")
         pdf.ln(10)
+
+        try:
+            for total in self.data['TOTAL']:
+                total_value = float(total) / 100
+                total = int(total_value) if total_value.is_integer() else round(total_value, 2)
+                pdf.cell(200, 10, txt=f"Quantidade total de horas faturadas: {total}", ln=True, align="C")
+                pdf.ln(10)
+        except ValueError:
+            pass
 
         pdf.set_font("Arial", size=10)
         headers = ["Descrição Analista", "Data", "Solicitante", "Descrição", "Hora Inicial", "Hora Final"]
@@ -114,3 +123,109 @@ class PDFGenerator:
         pdf.cell(200, 10, txt=f"Relatório gerado: {datetime.now().strftime('%d/%m/%Y')}", ln=True, align="C")
         pdf.output(output_file)
         return output_file
+
+class MonthlyPDFReport:
+    def __init__(self, data, graphs, month):
+        """
+        Inicializa o gerador de relatório PDF.
+        :param data: Dados relevantes para o relatório.
+        :param graphs: Gráficos gerados pelo frontend.
+        """
+        self.data = data
+        self.graphs = graphs
+        self.month = month
+
+    def generate_pdf(self, output_file):
+        try:
+            pdf = FPDF()
+            pdf.set_auto_page_break(auto=True, margin=15)
+
+            # Página Inicial
+            pdf.add_page()
+            pdf.set_font("Arial", style="B", size=16)
+            pdf.cell(0, 10, f"Relatório Mensal de Chamados | {self.month}", ln=True, align="C")
+            pdf.ln(10)
+            pdf.image("IT-Facil---logo---alta-47c0885e-6390534b-1920w.png", x=10, y=10, w=50)
+            pdf.image("totvs-logo.png", x=150, y=10, w=50)
+            pdf.ln(30)
+            pdf.set_font("Arial", size=12)
+            pdf.multi_cell(0, 10, f"Este relatório apresenta uma visão geral dos chamados do mês selecionado ({self.month}), incluindo métricas importantes como: Quantidade de cards, informações gerais, gráficos etc")
+
+            pdf.ln(5)
+            pdf.set_font("Arial", style="B", size=14)
+            pdf.cell(0, 10, "Informações Gerais do Mês", ln=True, align="C")
+            pdf.ln(5)
+            pdf.set_font("Arial", size=12)
+
+            pdf.cell(0, 10, f"Total de cards no mês: {self.data['total_cards']}", ln=True)
+            pdf.multi_cell(0, 10, (
+                f"- Destes, {self.data['counts']['Meu RH']} são relacionados ao Meu RH.\n"
+                f"- {self.data['counts']['TOTVS Datasul']} são relacionados ao TOTVS Datasul."
+            ))
+            pdf.ln(5)
+
+            pdf.set_font("Arial", style="B", size=14)
+            pdf.cell(0, 10, f"Fases atuais dos cards do mês selecionado ({self.month}):", ln=True, align="C")
+            pdf.set_font("Arial", size=12)
+            for phase, count in self.data['phases_count'].items():
+                pdf.cell(0, 10, f"Fase {phase}: {count}", ln=True)
+                pdf.ln(3)
+
+            # Títulos dos Cards Concluídos
+            pdf.add_page()
+            pdf.set_font("Arial", style="B", size=14)
+            pdf.cell(0, 10, "Títulos dos Cards Concluídos", ln=True, align="C")
+            pdf.ln(5)
+            pdf.set_font("Arial", size=12)
+
+            if self.data["cards"]:
+                pdf.multi_cell(0, 10, (
+                    "Abaixo estão listados os títulos dos cards concluídos no mês selecionado. "
+                    "Os links podem ser usados para acessar diretamente os cards no sistema Pipefy."
+                ))
+                pdf.ln(5)
+
+                # Verifica se self.data["cards"] é uma lista de dicionários
+                if isinstance(self.data["cards"], list):
+                    for card in self.data["cards"]:
+                        if card:
+                            pdf.multi_cell(0, 10, (
+                                f"- {card['node']['title']} (ID: {card['node']['id']})\n"
+                                f"  Link: https://app.pipefy.com/open-cards/{card['node']['id']}\n"
+                            ))
+                        else:
+                            print(f"Erro: Card não possui os campos esperados: {card["node"]}")
+            else:
+                pdf.cell(0, 10, "Não há cards concluídos no mês selecionado.", ln=True)
+
+            # Gráficos
+            for graph in self.graphs:
+                chart_path = f"{graph['title'].replace(' ', '_')}.png"
+                self.generate_chart(graph, chart_path)
+                pdf.add_page()
+                pdf.set_font("Arial", style="B", size=14)
+                pdf.cell(0, 10, graph["title"], ln=True, align="L")
+                pdf.ln(5)
+                pdf.image(chart_path, x=30, y=None, w=150)
+
+            # Data do Relatório
+            pdf.add_page()
+            pdf.set_font("Arial", style="B", size=12)
+            pdf.cell(0, 10, f"Relatório gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", ln=True, align="L")
+            print('finalizou pdf')
+            pdf.output(output_file)
+
+        except Exception as e:
+            print(e)
+
+    def generate_chart(self, graph, output_path):
+        import matplotlib.pyplot as plt
+
+        plt.figure(figsize=(10, 6))
+        plt.bar(graph["labels"], graph["values"], color=graph["colors"])
+        plt.title(graph["title"])
+        plt.xlabel(graph["xlabel"])
+        plt.ylabel(graph["ylabel"])
+        plt.tight_layout()
+        plt.savefig(output_path)
+        plt.close()

@@ -16,6 +16,13 @@ chamados_bp.add_url_rule('/chamados', 'add_chamado', chamado_controller.add_cham
 
 report_bp.add_url_rule('/generate', 'generate', report_controller.generate_report, methods=['GET'])
 
+report_bp.add_url_rule(
+    "/generate-monthly-report",
+    "generate_monthly_report",
+    report_controller.generate_monthly_report,
+    methods=["GET"],
+)
+
 pipefy_bp = Blueprint('pipefy', __name__)
 
 @pipefy_bp.route('/cards', methods=['GET'])
